@@ -157,6 +157,8 @@ void loop() {
   pca.setPWM(2, 0, pwmLX);
   pca.setPWM(3, 0, pwmLY);
 
+  // iuyyfghjgf
+
   // Kontrol gripper
   if (ps2x.ButtonPressed(PSB_R1)) {
     gripperPos = GRIPPER_OPEN;
