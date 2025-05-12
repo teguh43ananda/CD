@@ -19,15 +19,16 @@ int error = 0;
 byte type = 0;
 byte vibrate = 0;
 
-// PID parameters
+// PID
 float kp = 0.3;
 float ki = 0.02;
 float kd = 0.15;
 
-// Low-pass filter factor (semakin kecil semakin halus)
-float alpha = 0.3; // o,2 lumayan halus, 0,1 sangat halus, pertenagahannya di 0,2 
+// Default alpha dan mode
+float alpha = 0.3;
+bool modeHalus = true; // true = halus, false = biasa
 
-// PID variables
+// PID state
 float errorPID[4] = {0, 0, 0, 0};
 float prevError[4] = {0, 0, 0, 0};
 float integral[4] = {0, 0, 0, 0};
@@ -51,12 +52,24 @@ void setup() {
   for (int i = 0; i < 5; i++) {
     pca.setPWM(i, 0, SERVO_MID);
   }
+
+  // Set awal ke mode halus
+  alpha = 0.2;
+  Serial.println("Mode: HALUS");
 }
 
 void loop() {
   if (error == 1) return;
 
   ps2x.read_gamepad(false, vibrate);
+
+  // Toggle mode dengan tombol SELECT
+  if (ps2x.ButtonPressed(PSB_SELECT)) {
+    modeHalus = !modeHalus; // toggle
+    alpha = modeHalus ? 0.2 : 0.4;
+    Serial.print("Mode berubah ke: ");
+    Serial.println(modeHalus ? "HALUS" : "BIASA");
+  }
 
   // Joystick input
   int joy[4];
@@ -74,10 +87,10 @@ void loop() {
     float output = kp * errorPID[i] + ki * integral[i] + kd * derivative;
     prevError[i] = errorPID[i];
 
-    // Aplikasi Low-pass filter agar gerakan lebih halus
+    // Low-pass filter
     currentPWM[i] = (1 - alpha) * currentPWM[i] + alpha * (currentPWM[i] + output);
 
-    // Clamp agar tidak keluar dari batas servo
+    // Clamp
     if (currentPWM[i] < SERVOMIN) currentPWM[i] = SERVOMIN;
     if (currentPWM[i] > SERVOMAX) currentPWM[i] = SERVOMAX;
 
@@ -85,7 +98,7 @@ void loop() {
     pca.setPWM(i, 0, currentPWM[i]);
   }
 
-  // Kontrol gripper
+  // Gripper
   if (ps2x.ButtonPressed(PSB_R1)) {
     gripperPos = GRIPPER_OPEN;
     Serial.println("Gripper terbuka (R1)");
@@ -95,11 +108,11 @@ void loop() {
   }
   pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
 
-  // Debug
+  // Debug joystick
   Serial.print("RX: "); Serial.print(joy[0]);
   Serial.print("  RY: "); Serial.print(joy[1]);
   Serial.print("  LX: "); Serial.print(joy[2]);
   Serial.print("  LY: "); Serial.println(joy[3]);
 
-  delay(50);  // Delay kecil agar loop tidak terlalu cepat
+  delay(50);
 }
