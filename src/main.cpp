@@ -24,11 +24,14 @@ float kp = 0.3;
 float ki = 0.02;
 float kd = 0.15;
 
+// Low-pass filter factor (semakin kecil semakin halus)
+float alpha = 0.3; // o,2 lumayan halus, 0,1 sangat halus, pertenagahannya di 0,2 
+
 // PID variables
 float errorPID[4] = {0, 0, 0, 0};
 float prevError[4] = {0, 0, 0, 0};
 float integral[4] = {0, 0, 0, 0};
-int currentPWM[4] = {SERVO_MID, SERVO_MID, SERVO_MID, SERVO_MID};
+float currentPWM[4] = {SERVO_MID, SERVO_MID, SERVO_MID, SERVO_MID};
 
 void setup() {
   Serial.begin(57600);
@@ -39,7 +42,6 @@ void setup() {
   delay(1000);
 
   error = ps2x.config_gamepad(13, 23, 24, 25, true, true);
-
   if (error == 0) Serial.println("Controller terdeteksi dan dikonfigurasi.");
   else Serial.println("Gagal mendeteksi controller. Cek wiring.");
 
@@ -72,18 +74,18 @@ void loop() {
     float output = kp * errorPID[i] + ki * integral[i] + kd * derivative;
     prevError[i] = errorPID[i];
 
-    // Update simulated servo position
-    currentPWM[i] += output;
+    // Aplikasi Low-pass filter agar gerakan lebih halus
+    currentPWM[i] = (1 - alpha) * currentPWM[i] + alpha * (currentPWM[i] + output);
 
-    // Clamp output
+    // Clamp agar tidak keluar dari batas servo
     if (currentPWM[i] < SERVOMIN) currentPWM[i] = SERVOMIN;
     if (currentPWM[i] > SERVOMAX) currentPWM[i] = SERVOMAX;
 
-    // Send to servo
+    // Kirim ke servo
     pca.setPWM(i, 0, currentPWM[i]);
   }
 
-  // Gripper control
+  // Kontrol gripper
   if (ps2x.ButtonPressed(PSB_R1)) {
     gripperPos = GRIPPER_OPEN;
     Serial.println("Gripper terbuka (R1)");
@@ -93,11 +95,11 @@ void loop() {
   }
   pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
 
-  //Debug info
+  // Debug
   Serial.print("RX: "); Serial.print(joy[0]);
   Serial.print("  RY: "); Serial.print(joy[1]);
   Serial.print("  LX: "); Serial.print(joy[2]);
   Serial.print("  LY: "); Serial.println(joy[3]);
 
-  delay(50);
+  delay(50);  // Delay kecil agar loop tidak terlalu cepat
 }
