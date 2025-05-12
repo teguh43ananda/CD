@@ -19,16 +19,16 @@ int error = 0;
 byte type = 0;
 byte vibrate = 0;
 
-// PID
 float kp = 0.3;
 float ki = 0.02;
 float kd = 0.15;
 
-// Default alpha dan mode
-float alpha = 0.3;
-bool modeHalus = true; // true = halus, false = biasa
+float alpha = 0.2;  // default mode = halus
+bool modeHalus = true;
 
-// PID state
+bool freezeLeft = false;
+bool freezeRight = false;
+
 float errorPID[4] = {0, 0, 0, 0};
 float prevError[4] = {0, 0, 0, 0};
 float integral[4] = {0, 0, 0, 0};
@@ -52,10 +52,6 @@ void setup() {
   for (int i = 0; i < 5; i++) {
     pca.setPWM(i, 0, SERVO_MID);
   }
-
-  // Set awal ke mode halus
-  alpha = 0.2;
-  Serial.println("Mode: HALUS");
 }
 
 void loop() {
@@ -63,15 +59,24 @@ void loop() {
 
   ps2x.read_gamepad(false, vibrate);
 
-  // Toggle mode dengan tombol SELECT
-  if (ps2x.ButtonPressed(PSB_SELECT)) {
-    modeHalus = !modeHalus; // toggle
+  // Toggle mode halus/biasa dengan tombol mode
+  if (ps2x.ButtonPressed(PSB_START)) {
+    modeHalus = !modeHalus;
     alpha = modeHalus ? 0.2 : 0.4;
-    Serial.print("Mode berubah ke: ");
-    Serial.println(modeHalus ? "HALUS" : "BIASA");
+    Serial.print("Mode diubah ke: ");
+    Serial.println(modeHalus ? "Halus" : "Biasa");
   }
 
-  // Joystick input
+  // Toggle freeze L3 dan R3
+  if (ps2x.ButtonPressed(PSB_L3)) {
+    freezeLeft = !freezeLeft;
+    Serial.println(freezeLeft ? "Joystick kiri DI-BEKUKAN" : "Joystick kiri AKTIF");
+  }
+  if (ps2x.ButtonPressed(PSB_R3)) {
+    freezeRight = !freezeRight;
+    Serial.println(freezeRight ? "Joystick kanan DI-BEKUKAN" : "Joystick kanan AKTIF");
+  }
+
   int joy[4];
   joy[0] = ps2x.Analog(PSS_RX);
   joy[1] = ps2x.Analog(PSS_RY);
@@ -79,6 +84,12 @@ void loop() {
   joy[3] = ps2x.Analog(PSS_LY);
 
   for (int i = 0; i < 4; i++) {
+    bool skip = false;
+    if ((i == 0 || i == 1) && freezeRight) skip = true; // RX, RY
+    if ((i == 2 || i == 3) && freezeLeft)  skip = true; // LX, LY
+
+    if (skip) continue;
+
     int targetPWM = map(joy[i], 0, 255, SERVOMIN, SERVOMAX);
     errorPID[i] = targetPWM - currentPWM[i];
     integral[i] += errorPID[i];
@@ -87,18 +98,14 @@ void loop() {
     float output = kp * errorPID[i] + ki * integral[i] + kd * derivative;
     prevError[i] = errorPID[i];
 
-    // Low-pass filter
     currentPWM[i] = (1 - alpha) * currentPWM[i] + alpha * (currentPWM[i] + output);
 
-    // Clamp
     if (currentPWM[i] < SERVOMIN) currentPWM[i] = SERVOMIN;
     if (currentPWM[i] > SERVOMAX) currentPWM[i] = SERVOMAX;
 
-    // Kirim ke servo
     pca.setPWM(i, 0, currentPWM[i]);
   }
 
-  // Gripper
   if (ps2x.ButtonPressed(PSB_R1)) {
     gripperPos = GRIPPER_OPEN;
     Serial.println("Gripper terbuka (R1)");
@@ -108,7 +115,6 @@ void loop() {
   }
   pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
 
-  // Debug joystick
   Serial.print("RX: "); Serial.print(joy[0]);
   Serial.print("  RY: "); Serial.print(joy[1]);
   Serial.print("  LX: "); Serial.print(joy[2]);
