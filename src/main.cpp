@@ -20,9 +20,9 @@ byte type = 0;
 byte vibrate = 0;
 
 // PID parameters
-float kp = 1;
-float ki = 0.05;
-float kd = 0.1;
+float kp = 0.3;
+float ki = 0.02;
+float kd = 0.15;
 
 // PID variables
 float errorPID[4] = {0, 0, 0, 0};
@@ -93,11 +93,11 @@ void loop() {
   }
   pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
 
-  // Debug info
-  // Serial.print("RX: "); Serial.print(joy[0]);
-  // Serial.print("  RY: "); Serial.print(joy[1]);
-  // Serial.print("  LX: "); Serial.print(joy[2]);
-  // Serial.print("  LY: "); Serial.println(joy[3]);
+  //Debug info
+  Serial.print("RX: "); Serial.print(joy[0]);
+  Serial.print("  RY: "); Serial.print(joy[1]);
+  Serial.print("  LX: "); Serial.print(joy[2]);
+  Serial.print("  LY: "); Serial.println(joy[3]);
 
   delay(50);
 }
