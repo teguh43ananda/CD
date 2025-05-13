@@ -23,16 +23,15 @@ float kp = 0.3;
 float ki = 0.02;
 float kd = 0.15;
 
-float alpha = 0.2;  // default mode = halus
-bool modeHalus = true;
-
-bool freezeLeft = false;
-bool freezeRight = false;
+float alpha = 0.4; 
+bool modeHalus = true; 
 
 float errorPID[4] = {0, 0, 0, 0};
 float prevError[4] = {0, 0, 0, 0};
 float integral[4] = {0, 0, 0, 0};
 float currentPWM[4] = {SERVO_MID, SERVO_MID, SERVO_MID, SERVO_MID};
+
+bool freezeAxis[4] = {false, false, false, false}; // RX, RY, LX, LY
 
 void setup() {
   Serial.begin(57600);
@@ -59,23 +58,6 @@ void loop() {
 
   ps2x.read_gamepad(false, vibrate);
 
-  // Toggle mode halus/biasa dengan tombol mode
-  if (ps2x.ButtonPressed(PSB_START)) {
-    modeHalus = !modeHalus;
-    alpha = modeHalus ? 0.2 : 0.4;
-    Serial.print("Mode diubah ke: ");
-    Serial.println(modeHalus ? "Halus" : "Biasa");
-  }
-
-  // Toggle freeze L3 dan R3
-  if (ps2x.ButtonPressed(PSB_L3)) {
-    freezeLeft = !freezeLeft;
-    Serial.println(freezeLeft ? "Joystick kiri DI-BEKUKAN" : "Joystick kiri AKTIF");
-  }
-  if (ps2x.ButtonPressed(PSB_R3)) {
-    freezeRight = !freezeRight;
-    Serial.println(freezeRight ? "Joystick kanan DI-BEKUKAN" : "Joystick kanan AKTIF");
-  }
 
   int joy[4];
   joy[0] = ps2x.Analog(PSS_RX);
@@ -83,12 +65,34 @@ void loop() {
   joy[2] = ps2x.Analog(PSS_LX);
   joy[3] = ps2x.Analog(PSS_LY);
 
-  for (int i = 0; i < 4; i++) {
-    bool skip = false;
-    if ((i == 0 || i == 1) && freezeRight) skip = true; // RX, RY
-    if ((i == 2 || i == 3) && freezeLeft)  skip = true; // LX, LY
+  // Toggle mode halus/biasa 
+  if (ps2x.ButtonPressed(PSB_START)) {
+    modeHalus = !modeHalus;
+    alpha = modeHalus ? 0.3 : 0.8;
+    Serial.println(modeHalus ? "Mode: HALUS" : "Mode: BIASA");
+  }
 
-    if (skip) continue;
+  // Freeze axis toggle
+  if (ps2x.ButtonPressed(PSB_R2)) {
+    freezeAxis[0] = !freezeAxis[0]; // RX
+    Serial.println(freezeAxis[0] ? "RX dibekukan" : "RX aktif");
+  }
+  if (ps2x.ButtonPressed(PSB_R1)) {
+    freezeAxis[1] = !freezeAxis[1]; // RY
+    Serial.println(freezeAxis[1] ? "RY dibekukan" : "RY aktif");
+  }
+  if (ps2x.ButtonPressed(PSB_L2)) {
+    freezeAxis[2] = !freezeAxis[2]; // LX
+    Serial.println(freezeAxis[2] ? "LX dibekukan" : "LX aktif");
+  }
+  if (ps2x.ButtonPressed(PSB_L1)) {
+    freezeAxis[3] = !freezeAxis[3]; // LY
+    Serial.println(freezeAxis[3] ? "LY dibekukan" : "LY aktif");
+  }
+
+  // Update servo movement 
+  for (int i = 0; i < 4; i++) {
+    if (freezeAxis[i]) continue;
 
     int targetPWM = map(joy[i], 0, 255, SERVOMIN, SERVOMAX);
     errorPID[i] = targetPWM - currentPWM[i];
@@ -106,15 +110,18 @@ void loop() {
     pca.setPWM(i, 0, currentPWM[i]);
   }
 
-  if (ps2x.ButtonPressed(PSB_R1)) {
+  
+  if (ps2x.ButtonPressed(PSB_CROSS)) {
     gripperPos = GRIPPER_OPEN;
-    Serial.println("Gripper terbuka (R1)");
-  } else if (ps2x.ButtonPressed(PSB_L1)) {
+    Serial.println("Gripper terbuka (X)");
+  }
+  if (ps2x.ButtonPressed(PSB_CIRCLE)) {
     gripperPos = GRIPPER_CLOSE;
-    Serial.println("Gripper tertutup (L1)");
+    Serial.println("Gripper tertutup (O)");
   }
   pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
 
+  
   Serial.print("RX: "); Serial.print(joy[0]);
   Serial.print("  RY: "); Serial.print(joy[1]);
   Serial.print("  LX: "); Serial.print(joy[2]);
