@@ -25,7 +25,7 @@ float kp = 0.3, ki = 0.02, kd = 0.15;
 float alpha = 0.4; // default: mode biasa
 bool modeHalus = false;
 
-// EEPROM addresses
+// EEPROM address
 #define EEPROM_MODE_ADDR      0
 #define EEPROM_FREEZE_ADDR    1
 #define EEPROM_POS_START_ADDR 10 // Posisi currentPWM[0..4]
@@ -41,7 +41,7 @@ unsigned long lastSaveTime = 0; // Timestamp for the last save (to implement deb
 
 void saveToEEPROM() {
   unsigned long currentMillis = millis();
-  if (currentMillis - lastSaveTime < 1000) {  // debounce: 1-second interval between saves
+  if (currentMillis - lastSaveTime < 2000) {  // debounce: 2-second interval between saves
     return;  // Don't save if interval is too short
   }
   
@@ -116,7 +116,7 @@ void loop() {
   if (ps2x.ButtonPressed(PSB_R2)) { freeze[0] = !freeze[0]; saveToEEPROM(); } // RX
   if (ps2x.ButtonPressed(PSB_R1)) { freeze[1] = !freeze[1]; saveToEEPROM(); } // RY
 
-  // Gripper control
+
   if (ps2x.ButtonPressed(PSB_CROSS)) {
     gripperPos = GRIPPER_OPEN;
     currentPWM[GRIPPER_CHANNEL] = gripperPos;
