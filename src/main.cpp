@@ -85,7 +85,7 @@ void setup() {
   pca.setPWMFreq(50);
   delay(1000);
 
-  error = ps2x.config_gamepad(13, 23, 24, 25, true, true);
+  error = ps2x.config_gamepad(13, 14, 24, 25, true, true);
   if (error == 0) Serial.println("Controller terdeteksi dan dikonfigurasi.");
   else Serial.println("Gagal mendeteksi controller. Cek wiring.");
 
@@ -156,8 +156,10 @@ void loop() {
 
   Serial.print("RX: "); Serial.print(joy[0]);
   Serial.print("  RY: "); Serial.print(joy[1]);
-  Serial.print("  LX: "); Serial.print(joy[2]);
+  Serial.print("  LX: "); Serial.print(joy[2]);`
+  
   Serial.print("  LY: "); Serial.println(joy[3]);
   delay(50);
 }
+
 
