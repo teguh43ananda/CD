@@ -22,13 +22,13 @@ byte type = 0;
 
 // PID Parameters
 float kp = 0.3, ki = 0.02, kd = 0.15;
-float alpha = 0.2; // default: mode biasa
+float alpha = 0.2;
 bool modeHalus = false;
 
 // EEPROM address
 #define EEPROM_MODE_ADDR      0
 #define EEPROM_FREEZE_ADDR    1
-#define EEPROM_POS_START_ADDR 10 // Posisi currentPWM[0..4]
+#define EEPROM_POS_START_ADDR 10 // posisi currentPWM[0..4] mulai dari address 10
 
 // PID state
 float errorPID[4] = {0}, prevError[4] = {0}, integral[4] = {0};
@@ -36,25 +36,23 @@ float currentPWM[5] = {SERVO_MID, SERVO_MID, SERVO_MID, SERVO_MID, SERVO_MID};
 bool freeze[4] = {false, false, false, false};
 
 // Tracking changes
-int lastGripperPos = -1; // Used to store the last gripper position to avoid redundant writes
-unsigned long lastSaveTime = 0; // Timestamp for the last save (to implement debounce)
+float lastGripperPos = -1;
+unsigned long lastSaveTime = 0;
 
 void saveToEEPROM() {
   unsigned long currentMillis = millis();
-  if (currentMillis - lastSaveTime < 2000) {  // debounce: 2-second interval between saves
-    return;  // Don't save if interval is too short
-  }
-  
+  if (currentMillis - lastSaveTime < 2000) return;
+
   EEPROM.update(EEPROM_MODE_ADDR, modeHalus ? 1 : 0);
   for (int i = 0; i < 4; i++) {
     EEPROM.update(EEPROM_FREEZE_ADDR + i, freeze[i] ? 1 : 0);
   }
-  
+
   if (gripperPos != lastGripperPos) {
-    EEPROM.update(EEPROM_POS_START_ADDR + GRIPPER_CHANNEL * sizeof(float), gripperPos);
+    EEPROM.put(EEPROM_POS_START_ADDR + GRIPPER_CHANNEL * sizeof(float), (float)gripperPos);
     lastGripperPos = gripperPos;
   }
-  
+
   for (int i = 0; i < 5; i++) {
     if (i != GRIPPER_CHANNEL) {
       float valInEEPROM;
@@ -64,7 +62,7 @@ void saveToEEPROM() {
       }
     }
   }
-  
+
   lastSaveTime = currentMillis;
 }
 
@@ -78,10 +76,9 @@ void loadFromEEPROM() {
     EEPROM.get(EEPROM_POS_START_ADDR + i * sizeof(float), currentPWM[i]);
   }
   gripperPos = currentPWM[GRIPPER_CHANNEL];
-  
-  // Validasi nilai gripperPos agar aman
+
   if (gripperPos < GRIPPER_CLOSE || gripperPos > GRIPPER_OPEN) {
-    gripperPos = GRIPPER_CLOSE; // posisi aman default
+    gripperPos = GRIPPER_CLOSE;
     currentPWM[GRIPPER_CHANNEL] = gripperPos;
   }
 }
@@ -101,12 +98,10 @@ void setup() {
 
   loadFromEEPROM();
 
-  // Set posisi semua servo sesuai EEPROM
   for (int i = 0; i < 5; i++) {
     pca.setPWM(i, 0, currentPWM[i]);
   }
 
-  // Pastikan gripper langsung diset ke posisi terakhir dengan delay untuk servo reach posisi
   pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
   delay(500);
 }
@@ -115,7 +110,29 @@ void loop() {
   if (error == 1) return;
   ps2x.read_gamepad(false, vibrate);
 
-  // Toggle mode halus/biasa
+  if (ps2x.ButtonPressed(PSB_R3)) {
+    Serial.println("Menghapus EEPROM...");
+    
+    // Reset mode dan freeze
+    EEPROM.update(EEPROM_MODE_ADDR, 0);
+    for (int i = 0; i < 4; i++) {
+      EEPROM.update(EEPROM_FREEZE_ADDR + i, 0);
+    }
+  
+    // Reset posisi servo
+    for (int i = 0; i < 5; i++) {
+      float defaultPWM = (i == GRIPPER_CHANNEL) ? GRIPPER_CLOSE : SERVO_MID;
+      EEPROM.put(EEPROM_POS_START_ADDR + i * sizeof(float), defaultPWM);
+      currentPWM[i] = defaultPWM;
+      pca.setPWM(i, 0, defaultPWM);
+    }
+  
+    gripperPos = GRIPPER_CLOSE;
+    lastGripperPos = -1; // supaya bisa disimpan lagi kalau berubah nanti
+  
+    Serial.println("EEPROM berhasil direset ke default.");
+  }
+  
   if (ps2x.ButtonPressed(PSB_SELECT)) {
     modeHalus = !modeHalus;
     alpha = modeHalus ? 0.05 : 0.2;
@@ -123,13 +140,11 @@ void loop() {
     saveToEEPROM();
   }
 
-  // Toggle freeze per axis
   if (ps2x.ButtonPressed(PSB_L2)) { freeze[2] = !freeze[2]; saveToEEPROM(); }
   if (ps2x.ButtonPressed(PSB_L1)) { freeze[3] = !freeze[3]; saveToEEPROM(); }
   if (ps2x.ButtonPressed(PSB_R2)) { freeze[0] = !freeze[0]; saveToEEPROM(); }
   if (ps2x.ButtonPressed(PSB_R1)) { freeze[1] = !freeze[1]; saveToEEPROM(); }
 
-  // Kontrol wrist (channel 3) dengan tombol X dan O
   if (ps2x.ButtonPressed(PSB_CROSS)) {
     Serial.println("Wrist kiri (X)");
     currentPWM[3] -= 10;
@@ -144,16 +159,14 @@ void loop() {
     saveToEEPROM();
   }
 
-  // Baca joystick PS2
   int joy[4];
   joy[0] = ps2x.Analog(PSS_RX);
   joy[1] = ps2x.Analog(PSS_RY);
   joy[2] = ps2x.Analog(PSS_LX);
   joy[3] = ps2x.Analog(PSS_LY);
 
-  // Kontrol servo dengan PID + smoothing (kecuali wrist, index 3)
   for (int i = 0; i < 4; i++) {
-    if (i == 3 || freeze[i]) continue; // skip wrist, sudah dikontrol tombol
+    if (i == 3 || freeze[i]) continue;
 
     int targetPWM = map(joy[i], 0, 255, SERVOMIN, SERVOMAX);
     errorPID[i] = targetPWM - currentPWM[i];
@@ -164,22 +177,18 @@ void loop() {
     prevError[i] = errorPID[i];
 
     currentPWM[i] = (1 - alpha) * currentPWM[i] + alpha * (currentPWM[i] + output);
-    if (currentPWM[i] < SERVOMIN) currentPWM[i] = SERVOMIN;
-    if (currentPWM[i] > SERVOMAX) currentPWM[i] = SERVOMAX;
+    currentPWM[i] = constrain(currentPWM[i], SERVOMIN, SERVOMAX);
 
     pca.setPWM(i, 0, currentPWM[i]);
   }
 
-// Kontrol gripper (channel 4) pakai joystick LY (joy[3])
-if (!freeze[3]) {
-  int targetGripper = map(joy[3], 0, 255, GRIPPER_CLOSE, GRIPPER_OPEN);
-  gripperPos = (1 - alpha) * gripperPos + alpha * targetGripper;
-  if (gripperPos < GRIPPER_CLOSE) gripperPos = GRIPPER_CLOSE;
-  if (gripperPos > GRIPPER_OPEN) gripperPos = GRIPPER_OPEN;
-  currentPWM[GRIPPER_CHANNEL] = gripperPos;
-  pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
-}
-
+  if (!freeze[3]) {
+    int targetGripper = map(joy[3], 0, 255, GRIPPER_CLOSE, GRIPPER_OPEN);
+    gripperPos = (1 - alpha) * gripperPos + alpha * targetGripper;
+    gripperPos = constrain(gripperPos, GRIPPER_CLOSE, GRIPPER_OPEN);
+    currentPWM[GRIPPER_CHANNEL] = gripperPos;
+    pca.setPWM(GRIPPER_CHANNEL, 0, gripperPos);
+  }
 
   Serial.print("RX: "); Serial.print(joy[0]);
   Serial.print("  RY: "); Serial.print(joy[1]);
